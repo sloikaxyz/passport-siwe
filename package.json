@@ -1,0 +1,24 @@
+{
+  "name": "@sloikaxyz/passport-siwe",
+  "version": "0.1.0",
+  "description": "Sign in with Ethereum and Passport",
+  "main": "dist/index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/sloikaxyz/passport-siwe.git"
+  },
+  "keywords": [
+    "passport",
+    "siwe",
+    "ethereum"
+  ],
+  "author": "Sloika Industries Inc",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/sloikaxyz/passport-siwe/issues"
+  },
+  "homepage": "https://github.com/sloikaxyz/passport-siwe#readme"
+}
