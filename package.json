@@ -4,7 +4,17 @@
   "description": "Sign in with Ethereum and Passport",
   "main": "dist/index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "build": "tsc -p tsconfig.json",
+    "clean": "rm -rf dist",
+    "lint:ci:all": "eslint --max-warnings=0 .",
+    "lint:ci": "eslint --max-warnings=0",
+    "lint:fix:all": "eslint --cache --fix .",
+    "lint:fix": "eslint --cache --fix",
+    "lint:precommit": "eslint --cache --fix --max-warnings=0",
+    "lint": "eslint",
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "typecheck:ci:all": "tsc --noEmit --pretty --project tsconfig.json",
+    "typecheck:precommit": "tsc --noEmit --pretty --project tsconfig.json"
   },
   "repository": {
     "type": "git",
@@ -15,10 +25,20 @@
     "siwe",
     "ethereum"
   ],
-  "author": "Sloika Industries Inc",
+  "author": "Arseniy Ivanov <ai@sloika.xyz>",
   "license": "MIT",
   "bugs": {
     "url": "https://github.com/sloikaxyz/passport-siwe/issues"
   },
-  "homepage": "https://github.com/sloikaxyz/passport-siwe#readme"
+  "homepage": "https://github.com/sloikaxyz/passport-siwe#readme",
+  "devDependencies": {
+    "@typescript-eslint/eslint-plugin": "^5.30.7",
+    "@typescript-eslint/parser": "^5.30.7",
+    "eslint": "^8.20.0",
+    "eslint-config-prettier": "^8.5.0",
+    "eslint-plugin-import": "^2.26.0",
+    "eslint-plugin-prettier": "^4.2.1",
+    "prettier": "^2.7.1",
+    "typescript": "^4.7.4"
+  }
 }
