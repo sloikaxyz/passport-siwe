@@ -12,7 +12,9 @@
     "lint:fix": "eslint --cache --fix",
     "lint:precommit": "eslint --cache --fix --max-warnings=0",
     "lint": "eslint",
-    "test": "echo \"Error: no test specified\" && exit 1",
+    "test:ci:all": "ts-mocha --type-check --paths -p tsconfig.json 'src/**/*.test.ts'",
+    "test:precommit": "yarn test:ci:all",
+    "test:watch": "ts-mocha --type-check --paths -p tsconfig.json 'src/**/*.test.ts' -w --watch-files 'src/**/*.ts'",
     "typecheck:ci:all": "tsc --noEmit --pretty --project tsconfig.json",
     "typecheck:precommit": "tsc --noEmit --pretty --project tsconfig.json"
   },
@@ -32,13 +34,21 @@
   },
   "homepage": "https://github.com/sloikaxyz/passport-siwe#readme",
   "devDependencies": {
+    "@types/expect": "^24.3.0",
+    "@types/mocha": "^9.1.1",
     "@typescript-eslint/eslint-plugin": "^5.30.7",
     "@typescript-eslint/parser": "^5.30.7",
+    "chai": "^4.3.6",
+    "chai-passport-strategy": "3.x.x",
     "eslint": "^8.20.0",
     "eslint-config-prettier": "^8.5.0",
     "eslint-plugin-import": "^2.26.0",
     "eslint-plugin-prettier": "^4.2.1",
+    "mocha": "^10.0.0",
     "prettier": "^2.7.1",
+    "sinon": "^14.0.0",
+    "sinon-chai": "^3.7.0",
+    "ts-mocha": "^10.0.0",
     "typescript": "^4.7.4"
   }
 }
