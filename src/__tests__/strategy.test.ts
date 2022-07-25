@@ -1,73 +1,18 @@
 import chai, { expect } from 'chai';
 import ChaiPassportStrategy from 'chai-passport-strategy';
-import { ethers } from 'ethers';
 import sinon from 'sinon';
 import SinonChai from 'sinon-chai';
-import { generateNonce, SiweMessage } from 'siwe';
+import { SiweMessage } from 'siwe';
 
-import Strategy, { StrategyOptions, VerifierCallbackFn } from './strategy';
+import Strategy, { VerifierCallbackFn } from '~/strategy';
+
+import { createAccount, createSignInMessage, signMessage } from './accounts';
+import { DEFAULT_ADDRESS, DEFAULT_STRATEGY_OPTIONS } from './constants';
 
 chai.use(SinonChai);
 chai.use(ChaiPassportStrategy);
 
-const accounts = new Map();
-function createAccount(): ethers.Wallet {
-  const wallet = ethers.Wallet.createRandom();
-  accounts.set(wallet.address, wallet);
-
-  return wallet;
-}
-
-function getAccount(address: string): ethers.Wallet {
-  return accounts.get(address);
-}
-
-const DEFAULT_DOMAIN = 'example.org';
-const DEFAULT_URI = 'https://example.org/';
-const DEFAULT_ADDRESS = createAccount().address;
-const DEFAULT_CHAIN_ID = 1;
-
-function createSignInMessage(message: Partial<SiweMessage> = {}) {
-  message.domain ??= DEFAULT_DOMAIN;
-  message.address ??= DEFAULT_ADDRESS;
-  message.uri ??= DEFAULT_URI;
-  message.version ??= '1';
-  message.chainId ??= DEFAULT_CHAIN_ID;
-  message.nonce ??= generateNonce();
-
-  return new SiweMessage(message);
-}
-
-function signMessage(message: string | SiweMessage, signer?: ethers.Signer) {
-  if (!signer) {
-    const signerAddressFromMessage =
-      typeof message === 'string'
-        ? new SiweMessage(message).address
-        : message.address;
-    signer = getAccount(signerAddressFromMessage);
-  }
-
-  if (typeof message === 'string') {
-    return signer.signMessage(message);
-  }
-
-  return signer.signMessage(message.prepareMessage());
-}
-
 describe('Strategy', function () {
-  // const clock: SinonFakeTimers | null = null;
-
-  afterEach(function () {
-    // clock && clock.restore();
-  });
-
-  const DEFAULT_STRATEGY_OPTIONS: StrategyOptions = {
-    domain: 'example.org',
-    verify: (_message, _callback) => {
-      // do nothing
-    },
-  };
-
   it('should be named ethereum', function () {
     const strategy = new Strategy(DEFAULT_STRATEGY_OPTIONS);
 
