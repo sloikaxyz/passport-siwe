@@ -24,19 +24,23 @@ export type VerifierFnWithRequest = (
   callback: VerifierCallbackFn,
 ) => void | Promise<void>;
 
-export type StrategyOptions = {
+interface StrategyOptionsBase {
   domain: string;
   provider?: VerifyOpts['provider'];
-} & (
-  | {
-      passReqToCallback: true;
-      verify: VerifierFnWithRequest;
-    }
-  | {
-      passReqToCallback?: false;
-      verify: VerifierFn;
-    }
-);
+}
+
+export interface StrategyOptionsWithoutRequestPassing
+  extends StrategyOptionsBase {
+  passReqToCallback?: false;
+}
+
+export interface StrategyOptionsWithRequestPassing extends StrategyOptionsBase {
+  passReqToCallback: true;
+}
+
+export type StrategyOptions =
+  | StrategyOptionsWithoutRequestPassing
+  | StrategyOptionsWithRequestPassing;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
@@ -50,28 +54,64 @@ function isStrategyOptions(value: unknown): value is StrategyOptions {
     typeof value.domain === 'string' &&
     // provider is optional, but must be an ethers provider if it is provided
     (typeof value.provider === 'undefined' ||
-      ethers.providers.Provider.isProvider(value.provider)) &&
-    // verify must be a function...
-    (typeof value.verify === 'function'
-      ? // with no parameters or a rest parameter :shrugmoji:
-        value.verify.length === 0 ||
-        // or with 3 arguments if `passReqToCallback` is true, otherwise it must be a function with 2 arguments
-        (value.passReqToCallback
-          ? value.verify.length === 3
-          : value.verify.length === 2)
-      : false)
+      ethers.providers.Provider.isProvider(value.provider))
   );
+}
+
+function isValidVerifierForConfig(
+  verify: VerifierFn | VerifierFnWithRequest,
+  passReqToCallback = false,
+) {
+  // verify must be a function...
+  return typeof verify === 'function'
+    ? // with no parameters or a rest parameter :shrugmoji:
+      verify.length === 0 ||
+        // or with 3 arguments if `passReqToCallback` is true, otherwise it must be a function with 2 arguments
+        (passReqToCallback ? verify.length === 3 : verify.length === 2)
+    : false;
 }
 
 export default class Strategy extends AbstractStrategy {
   name = 'siwe';
 
-  constructor(private options: StrategyOptions) {
+  private options: StrategyOptions;
+  private verify: VerifierFn | VerifierFnWithRequest;
+
+  public constructor(
+    options: StrategyOptionsWithoutRequestPassing,
+    verify: VerifierFn,
+  );
+  public constructor(
+    options: StrategyOptionsWithRequestPassing,
+    verify: VerifierFnWithRequest,
+  );
+
+  constructor(
+    options:
+      | StrategyOptionsWithoutRequestPassing
+      | StrategyOptionsWithRequestPassing,
+    verify: VerifierFn | VerifierFnWithRequest,
+  ) {
     super();
 
     if (!isStrategyOptions(options)) {
       throw new Error('invalid options object');
     }
+
+    if (typeof verify !== 'function') {
+      throw new Error('verify is not a function');
+    }
+
+    if (!isValidVerifierForConfig(verify, options.passReqToCallback)) {
+      throw new Error(
+        `invalid verify function for passReqToCallback=${String(
+          options.passReqToCallback,
+        )}`,
+      );
+    }
+
+    this.options = options;
+    this.verify = verify;
   }
 
   authenticate(req: express.Request, _options?: unknown): void {
@@ -166,9 +206,9 @@ export default class Strategy extends AbstractStrategy {
         };
 
         if (this.options.passReqToCallback) {
-          void this.options.verify(req, data, callback);
+          void (this.verify as VerifierFnWithRequest)(req, data, callback);
         } else {
-          void this.options.verify(data, callback);
+          void (this.verify as VerifierFn)(data, callback);
         }
       })
       .catch((err: unknown) => {

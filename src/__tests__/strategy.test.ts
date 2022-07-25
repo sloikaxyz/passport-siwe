@@ -6,15 +6,20 @@ import { SiweMessage } from 'siwe';
 
 import Strategy, { VerifierCallbackFn } from '~/strategy';
 
-import { createAccount, createSignInMessage, signMessage } from './accounts';
-import { DEFAULT_ADDRESS, DEFAULT_STRATEGY_OPTIONS } from './constants';
+import { createAccount } from './accounts';
+import {
+  DEFAULT_ADDRESS,
+  DEFAULT_STRATEGY_OPTIONS,
+  DEFAULT_VERIFIER,
+} from './constants';
+import { createSignInMessage, signMessage } from './signing-helpers';
 
 chai.use(SinonChai);
 chai.use(ChaiPassportStrategy);
 
 describe('Strategy', function () {
   it('should be named ethereum', function () {
-    const strategy = new Strategy(DEFAULT_STRATEGY_OPTIONS);
+    const strategy = new Strategy(DEFAULT_STRATEGY_OPTIONS, DEFAULT_VERIFIER);
 
     expect(strategy.name).to.equal('siwe');
   });
@@ -24,30 +29,24 @@ describe('Strategy', function () {
       expect(
         () =>
           // @ts-expect-error -- options shouldn't be null
-          new Strategy(null),
+          new Strategy(null, DEFAULT_VERIFIER),
       ).to.throw(/invalid options object/);
     });
 
     it('rejects options without a domain', function () {
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      const { domain: _domain, ...options } = DEFAULT_STRATEGY_OPTIONS;
-
       expect(
         () =>
           // @ts-expect-error -- domain is required
-          new Strategy(options),
+          new Strategy({}, DEFAULT_VERIFIER),
       ).to.throw(/invalid options object/);
     });
 
-    it('rejects options without a verify function', function () {
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      const { verify: _verify, ...options } = DEFAULT_STRATEGY_OPTIONS;
-
+    it('rejects a null verify function', function () {
       expect(
         () =>
           // @ts-expect-error -- a verify function is required
-          new Strategy(options),
-      ).to.throw(/invalid options object/);
+          new Strategy(DEFAULT_STRATEGY_OPTIONS, null),
+      ).to.throw(/verify is not a function/);
     });
 
     it('rejects a malformed provider', function () {
@@ -55,25 +54,11 @@ describe('Strategy', function () {
         ...DEFAULT_STRATEGY_OPTIONS,
         provider: null,
       };
-      expect(
-        () =>
-          // @ts-expect-error -- a verify function is required
-          new Strategy(options),
-      ).to.throw(/invalid options object/);
-    });
-
-    it('accepts a rest-parameter verify function', function () {
-      const options = {
-        ...DEFAULT_STRATEGY_OPTIONS,
-        verify: ([_, callback]: [SiweMessage, VerifierCallbackFn]) => {
-          callback(null, {});
-        },
-      };
 
       expect(
         () =>
-          // @ts-expect-error -- a verify function is required
-          new Strategy(options),
+          // @ts-expect-error -- provider type incompatible
+          new Strategy(options, DEFAULT_VERIFIER),
       ).to.throw(/invalid options object/);
     });
   });
@@ -85,7 +70,7 @@ describe('Strategy', function () {
         const message = createSignInMessage().prepareMessage();
 
         chai.passport
-          .use(new Strategy(DEFAULT_STRATEGY_OPTIONS))
+          .use(new Strategy(DEFAULT_STRATEGY_OPTIONS, DEFAULT_VERIFIER))
           .request(function (req) {
             req.body = message;
           })
@@ -105,7 +90,7 @@ describe('Strategy', function () {
         const failSpy = sinon.spy();
 
         chai.passport
-          .use(new Strategy(DEFAULT_STRATEGY_OPTIONS))
+          .use(new Strategy(DEFAULT_STRATEGY_OPTIONS, DEFAULT_VERIFIER))
           .request(function (req) {
             req.body = { signature: '0xdeadbeef' };
           })
@@ -114,7 +99,7 @@ describe('Strategy', function () {
 
         expect(failSpy).to.have.been.calledWith(
           {
-            message: 'request body param "message" is not a string',
+            message: 'invalid request body param "message"',
           },
           400,
         );
@@ -127,7 +112,7 @@ describe('Strategy', function () {
         const message = createSignInMessage().prepareMessage();
 
         chai.passport
-          .use(new Strategy(DEFAULT_STRATEGY_OPTIONS))
+          .use(new Strategy(DEFAULT_STRATEGY_OPTIONS, DEFAULT_VERIFIER))
           .request(function (req) {
             req.body = {
               message,
@@ -158,7 +143,7 @@ describe('Strategy', function () {
             .replace(DEFAULT_ADDRESS, badDefaultAddress);
 
           chai.passport
-            .use(new Strategy(DEFAULT_STRATEGY_OPTIONS))
+            .use(new Strategy(DEFAULT_STRATEGY_OPTIONS, DEFAULT_VERIFIER))
             .request(function (req) {
               req.body = {
                 message,
@@ -189,7 +174,7 @@ describe('Strategy', function () {
           const messageJson = JSON.stringify(message);
 
           chai.passport
-            .use(new Strategy(DEFAULT_STRATEGY_OPTIONS))
+            .use(new Strategy(DEFAULT_STRATEGY_OPTIONS, DEFAULT_VERIFIER))
             .request(function (req) {
               req.body = {
                 message: JSON.parse(messageJson) as Record<string, unknown>,
@@ -225,7 +210,7 @@ describe('Strategy', function () {
 
           await new Promise<void>(function (resolve) {
             chai.passport
-              .use(new Strategy(DEFAULT_STRATEGY_OPTIONS))
+              .use(new Strategy(DEFAULT_STRATEGY_OPTIONS, DEFAULT_VERIFIER))
               .request(function (req) {
                 req.body = {
                   message: messageString,
@@ -264,7 +249,7 @@ describe('Strategy', function () {
 
           await new Promise<void>((resolve) => {
             chai.passport
-              .use(new Strategy(DEFAULT_STRATEGY_OPTIONS))
+              .use(new Strategy(DEFAULT_STRATEGY_OPTIONS, DEFAULT_VERIFIER))
               .request(function (req) {
                 req.body = {
                   message,
@@ -310,12 +295,7 @@ describe('Strategy', function () {
           });
 
           chai.passport
-            .use(
-              new Strategy({
-                ...DEFAULT_STRATEGY_OPTIONS,
-                verify,
-              }),
-            )
+            .use(new Strategy(DEFAULT_STRATEGY_OPTIONS, verify))
             .request(function (req) {
               req.body = {
                 message: JSON.parse(messageJson) as Record<string, unknown>,
