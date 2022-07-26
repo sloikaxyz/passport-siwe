@@ -55,7 +55,9 @@ export class ChaiStrategyTest<TStrategy extends Strategy> {
 
       strategy.error = (...args) => {
         if (!this.error) {
-          return reject('Strategy#error should not be called');
+          // If there's no error handler set, re-throw the error to aid in debugging.
+          const [err] = args;
+          throw err;
         }
 
         this.error.apply(req, args);

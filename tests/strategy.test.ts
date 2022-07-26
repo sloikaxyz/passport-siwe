@@ -1,12 +1,12 @@
 import { getMockReq } from '@jest-mock/express';
 import { SiweMessage } from 'siwe';
 
-import Strategy, { VerifierFn } from '../strategy';
+import Strategy, { VerifierFn } from '../src/strategy';
 
-import { createAccount } from './accounts';
-import { DEFAULT_STRATEGY_OPTIONS, DEFAULT_VERIFIER } from './constants';
-import { ChaiStrategyTest } from './harness';
-import { createSignInMessage, signMessage } from './signing-helpers';
+import { createAccount } from './utils/accounts';
+import { DEFAULT_STRATEGY_OPTIONS, DEFAULT_VERIFIER } from './utils/constants';
+import { ChaiStrategyTest } from './utils/harness';
+import { createSignInMessage, signMessage } from './utils/signing-helpers';
 
 describe('Strategy', function () {
   it('should be named ethereum', function () {
@@ -184,18 +184,16 @@ describe('Strategy', function () {
     });
 
     describe('bad field values', function () {
-      describe('wrong domain', function () {
+      describe('when the message specifies the wrong domain', function () {
         let test!: ChaiStrategyTest<Strategy>;
-
         beforeEach(() => {
           test = new ChaiStrategyTest(
             new Strategy(DEFAULT_STRATEGY_OPTIONS, DEFAULT_VERIFIER),
           );
         });
 
-        const badMessage = createSignInMessage({ domain: 'evildomain.com' });
-
         it('fails with a 401 Unauthorized', async function () {
+          const badMessage = createSignInMessage({ domain: 'evildomain.com' });
           const badMessageString = badMessage.prepareMessage();
           const signature = await signMessage(badMessageString);
 
@@ -220,10 +218,79 @@ describe('Strategy', function () {
         });
       });
 
+      describe('when the message is expired', function () {
+        let test!: ChaiStrategyTest<Strategy>;
+        beforeEach(() => {
+          test = new ChaiStrategyTest(
+            new Strategy(DEFAULT_STRATEGY_OPTIONS, DEFAULT_VERIFIER),
+          );
+        });
+
+        it('fails with a 401 Unauthorized and an appropriate message', async function () {
+          const badMessage = createSignInMessage({
+            expirationTime: '2020-03-17T00:00:00Z',
+          });
+          const badMessageString = badMessage.prepareMessage();
+          const signature = await signMessage(badMessageString);
+
+          test.fail = jest.fn();
+
+          await test.authenticate(
+            getMockReq({
+              method: 'POST',
+              body: {
+                message: badMessageString,
+                signature,
+              },
+            }),
+          );
+
+          expect(test.fail).toHaveBeenCalledWith(
+            {
+              message: 'Expired message.',
+            },
+            401,
+          );
+        });
+      });
+
+      describe('when the message is not yet valid', function () {
+        let test!: ChaiStrategyTest<Strategy>;
+        beforeEach(() => {
+          test = new ChaiStrategyTest(
+            new Strategy(DEFAULT_STRATEGY_OPTIONS, DEFAULT_VERIFIER),
+          );
+        });
+
+        it('fails with a 401 Unauthorized and an appropriate message', async function () {
+          const badMessage = createSignInMessage({
+            notBefore: new Date(Date.now() + 3600_000).toISOString(),
+          });
+          const badMessageString = badMessage.prepareMessage();
+          const signature = await signMessage(badMessageString);
+
+          test.fail = jest.fn();
+          await test.authenticate(
+            getMockReq({
+              method: 'POST',
+              body: {
+                message: badMessageString,
+                signature,
+              },
+            }),
+          );
+
+          expect(test.fail).toHaveBeenCalledWith(
+            {
+              message: 'Message is not valid yet.',
+            },
+            401,
+          );
+        });
+      });
+
       // TODO:
       // - nonce mismatch
-      // - notBefore
-      // - expirationTime
     });
 
     describe('signature verification', function () {
