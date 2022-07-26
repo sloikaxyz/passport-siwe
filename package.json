@@ -2,6 +2,21 @@
   "name": "@sloikaxyz/passport-siwe",
   "version": "0.1.0",
   "description": "Sign in with Ethereum and Passport",
+  "author": "Arseniy Ivanov <ai@sloika.xyz>",
+  "license": "MIT",
+  "homepage": "https://github.com/sloikaxyz/passport-siwe#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/sloikaxyz/passport-siwe.git"
+  },
+  "bugs": {
+    "url": "https://github.com/sloikaxyz/passport-siwe/issues"
+  },
+  "keywords": [
+    "passport",
+    "siwe",
+    "ethereum"
+  ],
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "scripts": {
@@ -20,21 +35,12 @@
     "typecheck:ci:all": "tsc --noEmit --pretty --project tsconfig.json",
     "typecheck:precommit": "tsc --noEmit --pretty --project tsconfig.json"
   },
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/sloikaxyz/passport-siwe.git"
+  "dependencies": {
+    "passport-strategy": "^1.0.0"
   },
-  "keywords": [
-    "passport",
-    "siwe",
-    "ethereum"
-  ],
-  "author": "Arseniy Ivanov <ai@sloika.xyz>",
-  "license": "MIT",
-  "bugs": {
-    "url": "https://github.com/sloikaxyz/passport-siwe/issues"
+  "peerDependencies": {
+    "siwe": ">=2.0.0 <3.0"
   },
-  "homepage": "https://github.com/sloikaxyz/passport-siwe#readme",
   "devDependencies": {
     "@jest-mock/express": "^2.0.1",
     "@types/express": "^4.16.0",
@@ -54,11 +60,5 @@
     "ts-invariant": "^0.10.3",
     "ts-jest": "^28.0.7",
     "typescript": "^4.7.4"
-  },
-  "dependencies": {
-    "passport-strategy": "^1.0.0"
-  },
-  "peerDependencies": {
-    "siwe": ">=2.0.0 <3.0"
   }
 }
