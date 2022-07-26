@@ -3,8 +3,9 @@
   "version": "0.1.0",
   "description": "Sign in with Ethereum and Passport",
   "main": "dist/index.js",
+  "types": "dist/index.d.ts",
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "build": "tsc -p tsconfig.build.json",
     "clean": "rm -rf dist",
     "lint:ci:all": "eslint --max-warnings=0 .",
     "lint:ci": "eslint --max-warnings=0",
