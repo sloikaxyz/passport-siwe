@@ -1,27 +1,18 @@
-import chai, { expect } from 'chai';
-import ChaiPassportStrategy from 'chai-passport-strategy';
-import sinon from 'sinon';
-import SinonChai from 'sinon-chai';
+import { getMockReq } from '@jest-mock/express';
 import { SiweMessage } from 'siwe';
 
-import Strategy, { VerifierCallbackFn } from '~/strategy';
+import Strategy, { VerifierFn } from '../strategy';
 
 import { createAccount } from './accounts';
-import {
-  DEFAULT_ADDRESS,
-  DEFAULT_STRATEGY_OPTIONS,
-  DEFAULT_VERIFIER,
-} from './constants';
+import { DEFAULT_STRATEGY_OPTIONS, DEFAULT_VERIFIER } from './constants';
+import { ChaiStrategyTest } from './harness';
 import { createSignInMessage, signMessage } from './signing-helpers';
-
-chai.use(SinonChai);
-chai.use(ChaiPassportStrategy);
 
 describe('Strategy', function () {
   it('should be named ethereum', function () {
     const strategy = new Strategy(DEFAULT_STRATEGY_OPTIONS, DEFAULT_VERIFIER);
 
-    expect(strategy.name).to.equal('siwe');
+    expect(strategy.name).toBe('siwe');
   });
 
   describe('options validation', function () {
@@ -30,7 +21,7 @@ describe('Strategy', function () {
         () =>
           // @ts-expect-error -- options shouldn't be null
           new Strategy(null, DEFAULT_VERIFIER),
-      ).to.throw(/invalid options object/);
+      ).toThrow(/invalid options object/);
     });
 
     it('rejects options without a domain', function () {
@@ -38,7 +29,7 @@ describe('Strategy', function () {
         () =>
           // @ts-expect-error -- domain is required
           new Strategy({}, DEFAULT_VERIFIER),
-      ).to.throw(/invalid options object/);
+      ).toThrow(/invalid options object/);
     });
 
     it('rejects a null verify function', function () {
@@ -46,7 +37,7 @@ describe('Strategy', function () {
         () =>
           // @ts-expect-error -- a verify function is required
           new Strategy(DEFAULT_STRATEGY_OPTIONS, null),
-      ).to.throw(/verify is not a function/);
+      ).toThrow(/verify is not a function/);
     });
 
     it('rejects a malformed provider', function () {
@@ -59,172 +50,168 @@ describe('Strategy', function () {
         () =>
           // @ts-expect-error -- provider type incompatible
           new Strategy(options, DEFAULT_VERIFIER),
-      ).to.throw(/invalid options object/);
+      ).toThrow(/invalid options object/);
     });
   });
 
   describe('authenticate', function () {
     describe('request body validation', function () {
-      it('errors on a request with a non-object body', function (done) {
-        const errSpy = sinon.spy();
-        const message = createSignInMessage().prepareMessage();
+      const message = createSignInMessage();
+      let test!: ChaiStrategyTest<Strategy>;
 
-        chai.passport
-          .use(new Strategy(DEFAULT_STRATEGY_OPTIONS, DEFAULT_VERIFIER))
-          .request(function (req) {
-            req.body = message;
-          })
-          .error(errSpy)
-          .authenticate();
-
-        expect(errSpy).to.have.been.calledWith(
-          sinon.match
-            .instanceOf(Error)
-            .and(sinon.match.has('message', 'request body is not an object')),
+      beforeEach(() => {
+        test = new ChaiStrategyTest(
+          new Strategy(DEFAULT_STRATEGY_OPTIONS, DEFAULT_VERIFIER),
         );
-
-        done();
       });
 
-      it('fails with Bad Request when the request has no message string', function (done) {
-        const failSpy = sinon.spy();
+      it('errors on a request with a non-object body', async function () {
+        test.error = jest.fn();
 
-        chai.passport
-          .use(new Strategy(DEFAULT_STRATEGY_OPTIONS, DEFAULT_VERIFIER))
-          .request(function (req) {
-            req.body = { signature: '0xdeadbeef' };
-          })
-          .fail(failSpy)
-          .authenticate();
+        await test.authenticate(
+          getMockReq({
+            method: 'POST',
+            body: message.prepareMessage(),
+          }),
+        );
 
-        expect(failSpy).to.have.been.calledWith(
+        expect(test.error).toHaveBeenCalledWith(
+          new Error('request body is not an object'),
+        );
+      });
+
+      it('fails with Bad Request when the request has no message property', async function () {
+        test.fail = jest.fn();
+
+        await test.authenticate(
+          getMockReq({
+            method: 'POST',
+            body: { signature: '0xdeadbeef' },
+          }),
+        );
+
+        expect(test.fail).toHaveBeenCalledWith(
           {
             message: 'invalid request body param "message"',
           },
           400,
         );
-
-        done();
       });
 
-      it('fails with Bad Request when the request has no signature string', function (done) {
-        const failSpy = sinon.spy();
-        const message = createSignInMessage().prepareMessage();
+      it('fails with Bad Request when the request has no signature property', async function () {
+        test.fail = jest.fn();
 
-        chai.passport
-          .use(new Strategy(DEFAULT_STRATEGY_OPTIONS, DEFAULT_VERIFIER))
-          .request(function (req) {
-            req.body = {
-              message,
-            };
-          })
-          .fail(failSpy)
-          .authenticate();
+        await test.authenticate(
+          getMockReq({
+            method: 'POST',
+            body: { message: message.prepareMessage() },
+          }),
+        );
 
-        expect(failSpy).to.have.been.calledWith(
+        expect(test.fail).toHaveBeenCalledWith(
           {
             message: 'request body param "signature" is not a string',
           },
           400,
         );
-
-        done();
       });
     });
 
     describe('malformed message handling', function () {
+      const message = createSignInMessage();
+      let test!: ChaiStrategyTest<Strategy>;
+
+      beforeEach(() => {
+        test = new ChaiStrategyTest(
+          new Strategy(DEFAULT_STRATEGY_OPTIONS, DEFAULT_VERIFIER),
+        );
+      });
+
       describe('when a string message is malformed', function () {
-        it('fails with 422 Unprocessable Entity', function (done) {
-          const failSpy = sinon.spy();
-
-          const badDefaultAddress = DEFAULT_ADDRESS.toLowerCase();
-          const message = createSignInMessage()
+        it('fails with 422 Unprocessable Entity', async function () {
+          const badAddress = message.address.toLowerCase(); // address is not EIP-55-compliant
+          const badMessageString = message
             .prepareMessage()
-            .replace(DEFAULT_ADDRESS, badDefaultAddress);
+            .replace(message.address, badAddress);
 
-          chai.passport
-            .use(new Strategy(DEFAULT_STRATEGY_OPTIONS, DEFAULT_VERIFIER))
-            .request(function (req) {
-              req.body = {
-                message,
+          test.fail = jest.fn();
+          await test.authenticate(
+            getMockReq({
+              method: 'POST',
+              body: {
+                message: badMessageString,
                 signature: '0xdeadbeef',
-              };
-            })
-            .fail(failSpy)
-            .authenticate();
+              },
+            }),
+          );
 
-          expect(failSpy).to.have.been.calledWith(
+          expect(test.fail).toHaveBeenCalledWith(
             {
               message: 'Address not conformant to EIP-55.',
             },
             422,
           );
-
-          done();
         });
       });
 
       describe('when an object message is malformed', function () {
-        it('fails with 422 Unprocessable Entity', function (done) {
-          const failSpy = sinon.spy();
+        it('fails with 422 Unprocessable Entity', async function () {
+          const badAddress = message.address.toLowerCase(); // address is not EIP-55-compliant
+          const badMessageObject: Partial<SiweMessage> = {
+            ...message,
+            address: badAddress,
+          };
 
-          const badDefaultAddress = DEFAULT_ADDRESS.toLowerCase();
-          const message = createSignInMessage();
-          message.address = badDefaultAddress;
-          const messageJson = JSON.stringify(message);
-
-          chai.passport
-            .use(new Strategy(DEFAULT_STRATEGY_OPTIONS, DEFAULT_VERIFIER))
-            .request(function (req) {
-              req.body = {
-                message: JSON.parse(messageJson) as Record<string, unknown>,
+          test.fail = jest.fn();
+          await test.authenticate(
+            getMockReq({
+              method: 'POST',
+              body: {
+                message: badMessageObject,
                 signature: '0xdeadbeef',
-              };
-            })
-            .fail(failSpy)
-            .authenticate();
+              },
+            }),
+          );
 
-          expect(failSpy).to.have.been.calledWith(
+          expect(test.fail).toHaveBeenCalledWith(
             {
               message: 'Invalid address.',
             },
             422,
           );
-
-          done();
         });
       });
     });
 
-    describe('expected values mismatch', function () {
+    describe('bad field values', function () {
       describe('wrong domain', function () {
+        let test!: ChaiStrategyTest<Strategy>;
+
+        beforeEach(() => {
+          test = new ChaiStrategyTest(
+            new Strategy(DEFAULT_STRATEGY_OPTIONS, DEFAULT_VERIFIER),
+          );
+        });
+
+        const badMessage = createSignInMessage({ domain: 'evildomain.com' });
+
         it('fails with a 401 Unauthorized', async function () {
-          const failSpy = sinon.spy();
+          const badMessageString = badMessage.prepareMessage();
+          const signature = await signMessage(badMessageString);
 
-          const message = createSignInMessage();
-          const messageString = message
-            .prepareMessage()
-            .replace(message.domain, 'evildomain.com');
+          test.fail = jest.fn();
 
-          const signature = await signMessage(messageString);
+          await test.authenticate(
+            getMockReq({
+              method: 'POST',
+              body: {
+                message: badMessageString,
+                signature,
+              },
+            }),
+          );
 
-          await new Promise<void>(function (resolve) {
-            chai.passport
-              .use(new Strategy(DEFAULT_STRATEGY_OPTIONS, DEFAULT_VERIFIER))
-              .request(function (req) {
-                req.body = {
-                  message: messageString,
-                  signature,
-                };
-              })
-              .fail((...args: Parameters<Strategy['fail']>) => {
-                failSpy(...args);
-                resolve();
-              })
-              .authenticate();
-          });
-
-          expect(failSpy).to.have.been.calledWith(
+          expect(test.fail).toHaveBeenCalledWith(
             {
               message: 'Domain do not match provided domain for verification.',
             },
@@ -233,13 +220,23 @@ describe('Strategy', function () {
         });
       });
 
-      // TODO: nonce mismatch
+      // TODO:
+      // - nonce mismatch
+      // - notBefore
+      // - expirationTime
     });
 
     describe('signature verification', function () {
       describe('when the message signer differs from the message address', function () {
+        let test!: ChaiStrategyTest<Strategy>;
+
+        beforeEach(() => {
+          test = new ChaiStrategyTest(
+            new Strategy(DEFAULT_STRATEGY_OPTIONS, DEFAULT_VERIFIER),
+          );
+        });
+
         it('fails with a 401 Unauthorized', async function () {
-          const failSpy = sinon.spy();
           const messageAddress = createAccount().address;
           const messageSigner = createAccount();
           const message = createSignInMessage({
@@ -247,23 +244,19 @@ describe('Strategy', function () {
           });
           const signature = await signMessage(message, messageSigner);
 
-          await new Promise<void>((resolve) => {
-            chai.passport
-              .use(new Strategy(DEFAULT_STRATEGY_OPTIONS, DEFAULT_VERIFIER))
-              .request(function (req) {
-                req.body = {
-                  message,
-                  signature,
-                };
-              })
-              .fail((...args: Parameters<Strategy['fail']>) => {
-                failSpy(...args);
-                resolve();
-              })
-              .authenticate();
-          });
+          test.fail = jest.fn();
 
-          expect(failSpy).to.have.been.calledWith(
+          await test.authenticate(
+            getMockReq({
+              method: 'POST',
+              body: {
+                message,
+                signature,
+              },
+            }),
+          );
+
+          expect(test.fail).toHaveBeenCalledWith(
             {
               message: 'Signature do not match address of the message.',
             },
@@ -274,44 +267,141 @@ describe('Strategy', function () {
     });
 
     describe('given a valid message-signature pair', function () {
-      it('calls the verify callback with the message', async function () {
-        const successSpy = sinon.spy();
+      describe('when verify callback returns an error', function () {
+        it('calls the error callback', async function () {
+          const verify = jest.fn<void, Parameters<VerifierFn>>(
+            (_message, callback) => {
+              callback(new Error('test error'), null);
+            },
+          );
 
-        const message = createSignInMessage();
-        const messageJson = JSON.stringify(message);
-        const signature = await signMessage(message);
+          const test = new ChaiStrategyTest(
+            new Strategy(DEFAULT_STRATEGY_OPTIONS, verify),
+          );
 
-        await new Promise<void>((resolve) => {
-          const verify = sinon.spy(function (
-            verifiedMessage: SiweMessage,
-            callback: VerifierCallbackFn,
-          ) {
-            expect(JSON.parse(JSON.stringify(verifiedMessage))).to.eq(
-              JSON.parse(JSON.stringify(message)),
-            );
+          const message = createSignInMessage();
+          const signature = await signMessage(message);
 
-            callback(null, null);
-            resolve();
-          });
-
-          chai.passport
-            .use(new Strategy(DEFAULT_STRATEGY_OPTIONS, verify))
-            .request(function (req) {
-              req.body = {
-                message: JSON.parse(messageJson) as Record<string, unknown>,
+          test.error = jest.fn();
+          await test.authenticate(
+            getMockReq({
+              method: 'POST',
+              body: {
+                message,
                 signature,
-              };
-            })
-            .success(successSpy)
-            .authenticate();
+              },
+            }),
+          );
+
+          expect(verify).toHaveBeenCalledWith(message, expect.any(Function));
+          expect(test.error).toHaveBeenCalledWith(new Error('test error'));
+        });
+      });
+
+      describe('when verify callback returns no error and no user', function () {
+        it('calls the fail callback with info and 401 Unauthorized', async function () {
+          const verify = jest.fn<void, Parameters<VerifierFn>>(
+            (message, callback) => {
+              callback(null, null, {
+                passing: 'info',
+                usedNonce: message.nonce,
+              });
+            },
+          );
+
+          const test = new ChaiStrategyTest(
+            new Strategy(DEFAULT_STRATEGY_OPTIONS, verify),
+          );
+
+          const message = createSignInMessage();
+          const signature = await signMessage(message);
+
+          test.fail = jest.fn();
+          await test.authenticate(
+            getMockReq({
+              method: 'POST',
+              body: {
+                message,
+                signature,
+              },
+            }),
+          );
+
+          expect(verify).toHaveBeenCalledWith(message, expect.any(Function));
+          expect(test.fail).toHaveBeenCalledWith(
+            {
+              passing: 'info',
+              usedNonce: message.nonce,
+            },
+            401,
+          );
+        });
+      });
+
+      describe('when verify callback returns a user', function () {
+        it('forwards user and info to the success callback', async function () {
+          const verify = jest.fn<void, Parameters<VerifierFn>>(
+            (message, callback) => {
+              callback(null, message.address);
+            },
+          );
+
+          const test = new ChaiStrategyTest(
+            new Strategy(DEFAULT_STRATEGY_OPTIONS, verify),
+          );
+
+          const message = createSignInMessage();
+          const signature = await signMessage(message);
+
+          test.success = jest.fn();
+          await test.authenticate(
+            getMockReq({
+              method: 'POST',
+              body: {
+                message,
+                signature,
+              },
+            }),
+          );
+
+          expect(verify).toHaveBeenCalledWith(message, expect.any(Function));
+          expect(test.success).toHaveBeenCalledWith(message.address, undefined);
         });
 
-        expect(successSpy).to.have.been.calledWith(
-          {
-            message: 'Signature do not match address of the message.',
-          },
-          401,
-        );
+        it('forwards user and info to the success callback', async function () {
+          const verify = jest.fn<void, Parameters<VerifierFn>>(
+            (message, callback) => {
+              callback(null, message.address, {
+                passing: 'info',
+                usedNonce: message.nonce,
+              });
+            },
+          );
+
+          const test = new ChaiStrategyTest(
+            new Strategy(DEFAULT_STRATEGY_OPTIONS, verify),
+          );
+
+          const message = createSignInMessage();
+          const signature = await signMessage(message);
+
+          test.success = jest.fn();
+          await test.authenticate(
+            getMockReq({
+              method: 'POST',
+              body: {
+                message,
+                signature,
+              },
+            }),
+          );
+
+          expect(verify).toHaveBeenCalledWith(message, expect.any(Function));
+          expect(test.success).toHaveBeenCalledWith(message.address, {
+            passing: 'info',
+            usedNonce: message.nonce,
+          });
+        });
       });
     });
   });

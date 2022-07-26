@@ -59,13 +59,6 @@ module.exports = {
           'sibling',
           'index',
         ],
-        pathGroups: [
-          {
-            pattern: '~/**',
-            group: 'internal',
-            position: 'after',
-          },
-        ],
         alphabetize: {
           order: 'asc',
           caseInsensitive: true,
