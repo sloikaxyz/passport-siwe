@@ -1,7 +1,7 @@
 import { getMockReq } from '@jest-mock/express';
 import { SiweMessage } from 'siwe';
 
-import Strategy, { VerifierFn } from '../src/strategy';
+import Strategy, { VerifierFn } from '../src';
 
 import { createAccount } from './utils/accounts';
 import { DEFAULT_STRATEGY_OPTIONS, DEFAULT_VERIFIER } from './utils/constants';

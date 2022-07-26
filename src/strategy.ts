@@ -1,46 +1,21 @@
 import { ethers } from 'ethers';
-import express from 'express';
+import type { Request } from 'express';
 import { Strategy as AbstractStrategy } from 'passport-strategy';
-import { SiweError, SiweMessage, VerifyOpts } from 'siwe';
+import { SiweError, SiweMessage } from 'siwe';
 
-const HTTP_CODE_UNAUTHORIZED = 401;
-const HTTP_CODE_BAD_REQUEST = 400;
-const HTTP_CODE_UNPROCESSABLE_ENTITY = 422;
-
-export type VerifierCallbackFn = (
-  err: Error | null,
-  user: unknown,
-  info?: unknown,
-) => void;
-
-export type VerifierFn = (
-  message: SiweMessage,
-  callback: VerifierCallbackFn,
-) => void | Promise<void>;
-
-export type VerifierFnWithRequest = (
-  req: express.Request,
-  siweMessage: SiweMessage,
-  callback: VerifierCallbackFn,
-) => void | Promise<void>;
-
-interface StrategyOptionsBase {
-  domain: string;
-  provider?: VerifyOpts['provider'];
-}
-
-export interface StrategyOptionsWithoutRequestPassing
-  extends StrategyOptionsBase {
-  passReqToCallback?: false;
-}
-
-export interface StrategyOptionsWithRequestPassing extends StrategyOptionsBase {
-  passReqToCallback: true;
-}
-
-export type StrategyOptions =
-  | StrategyOptionsWithoutRequestPassing
-  | StrategyOptionsWithRequestPassing;
+import {
+  HTTP_CODE_BAD_REQUEST,
+  HTTP_CODE_UNAUTHORIZED,
+  HTTP_CODE_UNPROCESSABLE_ENTITY,
+} from './constants';
+import {
+  StrategyOptions,
+  StrategyOptionsWithoutRequestPassing,
+  StrategyOptionsWithRequestPassing,
+  VerifierCallbackFn,
+  VerifierFn,
+  VerifierFnWithRequest,
+} from './types';
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
@@ -114,7 +89,7 @@ export default class Strategy extends AbstractStrategy {
     this.verify = verify;
   }
 
-  authenticate(req: express.Request, _options?: unknown): void {
+  authenticate(req: Request, _options?: unknown): void {
     const body = req.body as unknown;
     if (!isRecord(body)) {
       return this.error(new Error('request body is not an object'));
