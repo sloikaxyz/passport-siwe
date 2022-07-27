@@ -1,12 +1,15 @@
 import { getMockReq } from '@jest-mock/express';
-import { SiweMessage } from 'siwe';
+import invariant from 'ts-invariant';
 
 import Strategy, { VerifierFn } from '../src';
 
 import { createAccount } from './utils/accounts';
 import { DEFAULT_STRATEGY_OPTIONS, DEFAULT_VERIFIER } from './utils/constants';
 import { ChaiStrategyTest } from './utils/harness';
-import { createSignInMessage, signMessage } from './utils/signing-helpers';
+import {
+  createSignInMessage,
+  createSignInPayload,
+} from './utils/signing-helpers';
 
 describe('Strategy', function () {
   it('should be named ethereum', function () {
@@ -92,7 +95,7 @@ describe('Strategy', function () {
 
         expect(test.fail).toHaveBeenCalledWith(
           {
-            message: 'invalid request body param "message"',
+            message: 'request body param "message" is not a string',
           },
           400,
         );
@@ -118,7 +121,6 @@ describe('Strategy', function () {
     });
 
     describe('malformed message handling', function () {
-      const message = createSignInMessage();
       let test!: ChaiStrategyTest<Strategy>;
 
       beforeEach(() => {
@@ -127,59 +129,29 @@ describe('Strategy', function () {
         );
       });
 
-      describe('when a string message is malformed', function () {
-        it('fails with 422 Unprocessable Entity', async function () {
-          const badAddress = message.address.toLowerCase(); // address is not EIP-55-compliant
-          const badMessageString = message
-            .prepareMessage()
-            .replace(message.address, badAddress);
+      it('fails with 422 Unprocessable Entity', async function () {
+        const { message, signature, siweMessage } = await createSignInPayload();
 
-          test.fail = jest.fn();
-          await test.authenticate(
-            getMockReq({
-              method: 'POST',
-              body: {
-                message: badMessageString,
-                signature: '0xdeadbeef',
-              },
-            }),
-          );
+        const badAddress = siweMessage.address.toLowerCase(); // address is not EIP-55-compliant
+        const badMessage = message.replace(siweMessage.address, badAddress);
 
-          expect(test.fail).toHaveBeenCalledWith(
-            {
-              message: 'Address not conformant to EIP-55.',
+        test.fail = jest.fn();
+        await test.authenticate(
+          getMockReq({
+            method: 'POST',
+            body: {
+              message: badMessage,
+              signature,
             },
-            422,
-          );
-        });
-      });
+          }),
+        );
 
-      describe('when an object message is malformed', function () {
-        it('fails with 422 Unprocessable Entity', async function () {
-          const badAddress = message.address.toLowerCase(); // address is not EIP-55-compliant
-          const badMessageObject: Partial<SiweMessage> = {
-            ...message,
-            address: badAddress,
-          };
-
-          test.fail = jest.fn();
-          await test.authenticate(
-            getMockReq({
-              method: 'POST',
-              body: {
-                message: badMessageObject,
-                signature: '0xdeadbeef',
-              },
-            }),
-          );
-
-          expect(test.fail).toHaveBeenCalledWith(
-            {
-              message: 'Invalid address.',
-            },
-            422,
-          );
-        });
+        expect(test.fail).toHaveBeenCalledWith(
+          {
+            message: 'Address not conformant to EIP-55.',
+          },
+          422,
+        );
       });
     });
 
@@ -193,17 +165,19 @@ describe('Strategy', function () {
         });
 
         it('fails with a 401 Unauthorized', async function () {
-          const badMessage = createSignInMessage({ domain: 'evildomain.com' });
-          const badMessageString = badMessage.prepareMessage();
-          const signature = await signMessage(badMessageString);
+          const BAD_DOMAIN = 'evildomain.com';
+          invariant(BAD_DOMAIN !== DEFAULT_STRATEGY_OPTIONS.domain);
+
+          const { message, signature } = await createSignInPayload({
+            domain: BAD_DOMAIN,
+          });
 
           test.fail = jest.fn();
-
           await test.authenticate(
             getMockReq({
               method: 'POST',
               body: {
-                message: badMessageString,
+                message,
                 signature,
               },
             }),
@@ -227,21 +201,16 @@ describe('Strategy', function () {
         });
 
         it('fails with a 401 Unauthorized and an appropriate message', async function () {
-          const badMessage = createSignInMessage({
+          const { message, signature } = await createSignInPayload({
             expirationTime: '2020-03-17T00:00:00Z',
           });
-          const badMessageString = badMessage.prepareMessage();
-          const signature = await signMessage(badMessageString);
 
           test.fail = jest.fn();
 
           await test.authenticate(
             getMockReq({
               method: 'POST',
-              body: {
-                message: badMessageString,
-                signature,
-              },
+              body: { message, signature },
             }),
           );
 
@@ -263,18 +232,16 @@ describe('Strategy', function () {
         });
 
         it('fails with a 401 Unauthorized and an appropriate message', async function () {
-          const badMessage = createSignInMessage({
+          const { message, signature } = await createSignInPayload({
             notBefore: new Date(Date.now() + 3600_000).toISOString(),
           });
-          const badMessageString = badMessage.prepareMessage();
-          const signature = await signMessage(badMessageString);
 
           test.fail = jest.fn();
           await test.authenticate(
             getMockReq({
               method: 'POST',
               body: {
-                message: badMessageString,
+                message,
                 signature,
               },
             }),
@@ -306,20 +273,20 @@ describe('Strategy', function () {
         it('fails with a 401 Unauthorized', async function () {
           const messageAddress = createAccount().address;
           const messageSigner = createAccount();
-          const message = createSignInMessage({
-            address: messageAddress,
-          });
-          const signature = await signMessage(message, messageSigner);
+
+          const { message, signature } = await createSignInPayload(
+            {
+              address: messageAddress,
+            },
+            messageSigner,
+          );
 
           test.fail = jest.fn();
 
           await test.authenticate(
             getMockReq({
               method: 'POST',
-              body: {
-                message,
-                signature,
-              },
+              body: { message, signature },
             }),
           );
 
@@ -346,21 +313,20 @@ describe('Strategy', function () {
             new Strategy(DEFAULT_STRATEGY_OPTIONS, verify),
           );
 
-          const message = createSignInMessage();
-          const signature = await signMessage(message);
+          const { siweMessage, ...body } = await createSignInPayload();
 
           test.error = jest.fn();
           await test.authenticate(
             getMockReq({
               method: 'POST',
-              body: {
-                message,
-                signature,
-              },
+              body,
             }),
           );
 
-          expect(verify).toHaveBeenCalledWith(message, expect.any(Function));
+          expect(verify).toHaveBeenCalledWith(
+            siweMessage,
+            expect.any(Function),
+          );
           expect(test.error).toHaveBeenCalledWith(new Error('test error'));
         });
       });
@@ -380,25 +346,24 @@ describe('Strategy', function () {
             new Strategy(DEFAULT_STRATEGY_OPTIONS, verify),
           );
 
-          const message = createSignInMessage();
-          const signature = await signMessage(message);
+          const { siweMessage, ...body } = await createSignInPayload();
 
           test.fail = jest.fn();
           await test.authenticate(
             getMockReq({
               method: 'POST',
-              body: {
-                message,
-                signature,
-              },
+              body,
             }),
           );
 
-          expect(verify).toHaveBeenCalledWith(message, expect.any(Function));
+          expect(verify).toHaveBeenCalledWith(
+            siweMessage,
+            expect.any(Function),
+          );
           expect(test.fail).toHaveBeenCalledWith(
             {
               passing: 'info',
-              usedNonce: message.nonce,
+              usedNonce: siweMessage.nonce,
             },
             401,
           );
@@ -417,22 +382,24 @@ describe('Strategy', function () {
             new Strategy(DEFAULT_STRATEGY_OPTIONS, verify),
           );
 
-          const message = createSignInMessage();
-          const signature = await signMessage(message);
+          const { siweMessage, ...body } = await createSignInPayload();
 
           test.success = jest.fn();
           await test.authenticate(
             getMockReq({
               method: 'POST',
-              body: {
-                message,
-                signature,
-              },
+              body,
             }),
           );
 
-          expect(verify).toHaveBeenCalledWith(message, expect.any(Function));
-          expect(test.success).toHaveBeenCalledWith(message.address, undefined);
+          expect(verify).toHaveBeenCalledWith(
+            siweMessage,
+            expect.any(Function),
+          );
+          expect(test.success).toHaveBeenCalledWith(
+            siweMessage.address,
+            undefined,
+          );
         });
 
         it('forwards user and info to the success callback', async function () {
@@ -449,24 +416,23 @@ describe('Strategy', function () {
             new Strategy(DEFAULT_STRATEGY_OPTIONS, verify),
           );
 
-          const message = createSignInMessage();
-          const signature = await signMessage(message);
+          const { siweMessage, ...body } = await createSignInPayload();
 
           test.success = jest.fn();
           await test.authenticate(
             getMockReq({
               method: 'POST',
-              body: {
-                message,
-                signature,
-              },
+              body,
             }),
           );
 
-          expect(verify).toHaveBeenCalledWith(message, expect.any(Function));
-          expect(test.success).toHaveBeenCalledWith(message.address, {
+          expect(verify).toHaveBeenCalledWith(
+            siweMessage,
+            expect.any(Function),
+          );
+          expect(test.success).toHaveBeenCalledWith(siweMessage.address, {
             passing: 'info',
-            usedNonce: message.nonce,
+            usedNonce: siweMessage.nonce,
           });
         });
       });

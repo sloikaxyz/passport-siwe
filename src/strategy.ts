@@ -96,10 +96,10 @@ export default class Strategy extends AbstractStrategy {
     }
 
     const { message, signature } = body;
-    if (typeof message !== 'string' && !isRecord(message)) {
+    if (typeof message !== 'string') {
       return this.fail(
         {
-          message: 'invalid request body param "message"',
+          message: 'request body param "message" is not a string',
         },
         HTTP_CODE_BAD_REQUEST,
       );

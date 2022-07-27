@@ -42,3 +42,16 @@ export function signMessage(
     message instanceof SiweMessage ? message.prepareMessage() : message,
   );
 }
+
+export async function createSignInPayload(
+  messageParams: Partial<SiweMessage> = {},
+  signer?: ethers.Signer,
+): Promise<{ siweMessage: SiweMessage; message: string; signature: string }> {
+  const siweMessage = createSignInMessage(messageParams);
+  const message = siweMessage.prepareMessage();
+  const signature = await signMessage(
+    message,
+    signer ?? getAccount(siweMessage.address),
+  );
+  return { siweMessage, message, signature };
+}
