@@ -1,0 +1,29 @@
+name: Test and build
+
+on: [push, pull_request]
+
+jobs:
+  lint_and_test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        ##
+        # ethers.Wallet (which we use) doesn't work on Node >=17,
+        # see https://github.com/ethers-io/ethers.js/issues/3082
+        # fix should be released in ethers@^5.7, see https://github.com/ethers-io/ethers.js/commit/450694e25760d383f3fe3b299d181ebe5fd6ab06
+        # nodejs: [14, 16, 18]
+        nodejs: [14, 16]
+
+    steps:
+    - uses: actions/checkout@v3
+
+    # https://github.com/actions/setup-node
+    - uses: actions/setup-node@v3
+      with:
+        node-version: ${{ matrix.nodejs }}
+
+    - run: yarn install --frozen-lockfile
+    - run: yarn lint:ci:all
+    - run: yarn typecheck:ci:all
+    - run: yarn test:ci:all
